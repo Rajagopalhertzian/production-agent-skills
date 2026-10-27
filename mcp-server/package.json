@@ -1,0 +1,36 @@
+{
+  "name": "production-agent-skills",
+  "version": "1.0.0",
+  "description": "MCP Server for Production Agent Skills - provides skills as resources and tools",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "ai-agents",
+    "skills",
+    "coding-agents"
+  ],
+  "author": "production-agent-skills contributors",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "yaml": "^2.5.0",
+    "glob": "^11.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0",
+    "tsx": "^4.19.0",
+    "vitest": "^2.0.0"
+  },
+  "files": [
+    "dist/**/*"
+  ]
+}

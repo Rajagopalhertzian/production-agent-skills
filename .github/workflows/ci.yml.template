@@ -1,0 +1,150 @@
+# CI Pipeline for Production Agent Skills
+
+This workflow validates the skill repository structure and runs basic checks.
+
+```yaml
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate-structure:
+    name: Validate Skill Structure
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install validation tools
+        run: |
+          pip install pyyaml markdown-it-py jsonschema
+
+      - name: Validate all SKILL.md files
+        run: |
+          python scripts/validate-skills.py
+
+      - name: Validate JSON examples
+        run: |
+          python scripts/validate-json-examples.py
+
+      - name: Check cross-references
+        run: |
+          python scripts/check-cross-references.py
+
+  markdown-lint:
+    name: Markdown Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install markdownlint
+        run: npm install -g markdownlint-cli
+
+      - name: Lint all markdown
+        run: |
+          markdownlint "**/*.md" --ignore node_modules --ignore ".git"
+
+  spell-check:
+    name: Spell Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run cspell
+        uses: streetsidesoftware/cspell-action@v6
+        with:
+          files: "**/*.md"
+          config: ".cspell.json"
+
+  skill-security-scan:
+    name: Skill Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install SkillSpector
+        run: |
+          # Install from release or build from source
+          go install github.com/NVIDIA/SkillSpector/cmd/skillspector@latest
+
+      - name: Scan all skills
+        run: |
+          for skill in skills/*/; do
+            echo "Scanning $skill"
+            skillspector scan "$skill" --format json --output "skillspector-${skill//\//-}.json"
+          done
+
+      - name: Upload scan results
+        uses: actions/upload-artifact@v4
+        with:
+          name: skillspector-results
+          path: skillspector-*.json
+
+  test-fixtures:
+    name: Validate Test Fixtures
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check test fixtures exist
+        run: |
+          for skill in skills/*/; do
+            skill_name=$(basename "$skill")
+            if [ ! -f "tests/$skill_name/FIXTURES.md" ]; then
+              echo "Missing test fixtures for $skill_name"
+              exit 1
+            fi
+          done
+        shell: bash
+
+      - name: Validate fixture format
+        run: |
+          python scripts/validate-fixtures.py
+
+  docs-check:
+    name: Documentation Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check required docs
+        run: |
+          required=("README.md" "LICENSE" "CONTRIBUTING.md" "SECURITY.md" "SKILL-STRUCTURE.md")
+          for file in "${required[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "Missing required file: $file"
+              exit 1
+            fi
+          done
+
+      - name: Check skill READMEs
+        run: |
+          for skill in skills/*/; do
+            if [ ! -f "${skill}README.md" ]; then
+              echo "Missing README.md for $(basename "$skill")"
+              exit 1
+            fi
+          done
+        shell: bash
+```
+
+**Note:** This is a template workflow. Create actual workflow files in `.github/workflows/` when setting up the repository.
