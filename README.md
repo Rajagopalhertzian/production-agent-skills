@@ -170,4 +170,3 @@ This project draws inspiration and patterns from:
 - [hadolint/hadolint](https://github.com/hadolint/hadolint) — Dockerfile linting
 - [bridgecrewio/checkov](https://github.com/bridgecrewio/checkov) — IaC validation
 
-All skills are **independently written** — no code copied from above projects. Concepts and patterns adapted with attribution.
