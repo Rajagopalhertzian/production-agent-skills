@@ -5,9 +5,10 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/bundle-skills.js",
     "start": "node dist/index.js",
-    "dev": "tsx watch src/index.ts",
+    "dev": "MCP_TRANSPORT=stdio tsx watch src/index.ts",
+    "dev:http": "MCP_TRANSPORT=http tsx watch src/index.ts",
     "test": "vitest run"
   },
   "keywords": [
@@ -21,8 +22,7 @@
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
-    "yaml": "^2.5.0",
-    "glob": "^11.0.0"
+    "yaml": "^2.5.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
@@ -31,6 +31,7 @@
     "vitest": "^2.0.0"
   },
   "files": [
-    "dist/**/*"
+    "dist/**/*",
+    "skills/**/*"
   ]
 }

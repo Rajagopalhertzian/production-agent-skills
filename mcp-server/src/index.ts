@@ -3,11 +3,13 @@
  * Production Agent Skills MCP Server
  * 
  * Provides skills as MCP resources and tools for AI coding agents.
- * Compatible with Claude Desktop, Cursor, and other MCP clients.
+ * Supports both STDIO (local) and Streamable HTTP (remote) transports.
  */
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { createServer } from "http";
 import {
   CallToolRequestSchema,
   ListResourcesRequestSchema,
@@ -21,7 +23,11 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import * as yaml from "yaml";
 
-const SKILLS_ROOT = path.resolve(process.env.SKILLS_PATH || path.join(__dirname, "..", "..", "skills"));
+const SKILLS_ROOT = path.resolve(
+  process.env.SKILLS_PATH || 
+  path.join(__dirname, "skills") || 
+  path.join(__dirname, "..", "..", "skills")
+);
 
 interface SkillMetadata {
   name: string;
@@ -88,7 +94,6 @@ class SkillsMCPServer {
       const resources: Resource[] = [];
 
       for (const [skillName, skill] of this.skillsCache) {
-        // Main skill file
         resources.push({
           uri: `skill://${skillName}`,
           name: skillName,
@@ -96,7 +101,6 @@ class SkillsMCPServer {
           mimeType: "text/markdown",
         });
 
-        // Reference files
         const refs = this.referencesCache.get(skillName) || [];
         for (const ref of refs) {
           const relPath = path.relative(path.join(SKILLS_ROOT, skillName), ref.path);
@@ -108,7 +112,6 @@ class SkillsMCPServer {
           });
         }
 
-        // Example files
         const examplesDir = path.join(SKILLS_ROOT, skillName, "examples");
         try {
           const exampleFiles = await this.readDirRecursive(examplesDir, ".md");
@@ -167,14 +170,13 @@ class SkillsMCPServer {
         throw new Error(`Unknown URI scheme: ${uri}`);
       }
 
-      const pathPart = uri.slice(8); // Remove "skill://"
+      const pathPart = uri.slice(8);
       const parts = pathPart.split("/");
       const skillName = parts[0];
 
       await this.loadAllSkills();
 
       if (parts.length === 1) {
-        // Main skill file
         const skill = this.skillsCache.get(skillName);
         if (!skill) throw new Error(`Skill not found: ${skillName}`);
         return {
@@ -186,7 +188,7 @@ class SkillsMCPServer {
         };
       }
 
-      const subType = parts[1]; // "references" or "examples"
+      const subType = parts[1];
       const subPath = parts.slice(2).join("/");
 
       if (subType === "references") {
@@ -225,7 +227,6 @@ class SkillsMCPServer {
       await this.loadAllSkills();
       const tools: Tool[] = [];
 
-      // Tool to get skill guidance for execution
       tools.push({
         name: "get_skill_guidance",
         description: "Get the full skill guidance for a specific skill to execute its workflow",
@@ -239,7 +240,7 @@ class SkillsMCPServer {
             },
             context: {
               type: "object",
-              description: "Optional context for the skill execution (repository path, task description, etc.)",
+              description: "Optional context for the skill execution",
               properties: {
                 repository_path: { type: "string" },
                 task_description: { type: "string" },
@@ -251,7 +252,6 @@ class SkillsMCPServer {
         },
       });
 
-      // Tool to validate a skill structure
       tools.push({
         name: "validate_skill",
         description: "Validate a skill's structure and completeness",
@@ -268,7 +268,6 @@ class SkillsMCPServer {
         },
       });
 
-      // Tool to list all available skills
       tools.push({
         name: "list_skills",
         description: "List all available skills with their descriptions and metadata",
@@ -278,7 +277,6 @@ class SkillsMCPServer {
         },
       });
 
-      // Tool to search skills by keyword
       tools.push({
         name: "search_skills",
         description: "Search skills by keyword in name or description",
@@ -527,9 +525,56 @@ class SkillsMCPServer {
   }
 
   async run() {
+    const transportType = process.env.MCP_TRANSPORT || "stdio";
+    
+    if (transportType === "http") {
+      await this.runHttp();
+    } else {
+      await this.runStdio();
+    }
+  }
+
+  private async runStdio() {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
     console.error("Production Agent Skills MCP Server running on stdio");
+  }
+
+  private async runHttp() {
+    const httpTransport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: () => crypto.randomUUID(),
+    });
+
+    const httpServer = createServer(async (req, res) => {
+      // CORS headers for browser clients
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+      
+      if (req.method === "OPTIONS") {
+        res.writeHead(204);
+        res.end();
+        return;
+      }
+
+      await httpTransport.handleRequest(req, res);
+    });
+
+    const PORT = process.env.PORT || 3000;
+    
+    await this.server.connect(httpTransport);
+    
+    httpServer.listen(PORT, () => {
+      console.error(`Production Agent Skills MCP Server running on HTTP port ${PORT}`);
+    });
+
+    // Graceful shutdown
+    process.on("SIGTERM", async () => {
+      console.error("Shutting down...");
+      await httpTransport.close();
+      httpServer.close();
+      process.exit(0);
+    });
   }
 }
 
